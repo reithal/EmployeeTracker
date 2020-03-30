@@ -1,6 +1,14 @@
+/* 
+  server.js file for Node.js server application.
+  HomeWork: Employer Tracker
+  Author: Carlos Mazon
+  Date: March 2020
+*/
+
+
 var mysql = require("mysql");
 var inquirer = require("inquirer");
-const cTable = require('console.table');
+const cTable = require('console.table');  // NPMs console table
 
 // Setup MySql Connection
 var connection = mysql.createConnection({
@@ -13,188 +21,362 @@ var connection = mysql.createConnection({
   database: "EMPLOYEE_TRACKER_DB"
 });
 
+// Connect to the database and initiate the first funtion to bring up inquirer.
 connection.connect(function(err) {
   if (err) throw err;
   runTracker();
 });
 
+// Query to return main set of all 3 tables together.
+const mainQuery = ("SELECT a.id as id, a.first_name, a.last_name, b.title, c.name as department, b.salary, d.manager FROM employee as a INNER JOIN role as b ON a.role_id = b.id INNER JOIN department as c ON b.department_id = c.id   LEFT OUTER JOIN (SELECT id, concat(first_name, ' ', last_name) as manager from employee) as d ON a.manager_id = d.id");
+
+/**
+ *  Queries the department table to retun an array. Used for Inquirer choices.
+ *
+ * @returns {Array} object with name of departments
+ */
+function getDepts() {
+  var departments = [];
+
+  return new Promise(function(resolve, reject) {
+    connection.query("SELECT * FROM department", function(err, res) {
+      if (err) {
+        reject(err)
+      };
+      res.forEach((dept)=>{
+        const newDept = {
+          value: dept.id,
+          name: dept.name
+        }
+        departments.push(newDept);
+      });
+      resolve(departments);
+    });
+  });
+};
+
+/**
+ *  Queries the Role table to retun an array. Used for Inquirer choices.
+ *
+ * @returns {Array} object with id, name
+ */
+function getRoles() {
+  var roles = [];
+
+  return new Promise(function(resolve, reject) {
+    connection.query("SELECT * FROM role", function(err, res) {
+      if (err) {
+        reject(err)
+      };
+      res.forEach((role)=>{
+        const newRole = {
+          value: role.id,
+          name: role.title
+        };
+        roles.push(newRole);
+      });
+      resolve(roles);
+    });
+  });
+};
+
+/**
+ *  Queries the Employee table to retun an array. Used for Inquirer choices.
+ *
+ * @returns {Array} object with id, name passed to value,name.
+ */
+
+function getEmployees() {
+  const employees=[];
+  return new Promise(function(resolve, reject) {
+    connection.query("SELECT id, concat(first_name, ' ', last_name) as name FROM employee", function(err, res) {
+      res.forEach((emp)=>{
+        const employee= {
+          value : emp.id,
+          name : emp.name
+        }
+        employees.push(employee);
+      });
+      resolve(employees);
+    });
+  })
+};
+
+/**
+ *  Main function of the program. Initiates the user prompt/ UI. 
+ *  Calls other functions based on user response.
+ */
 function runTracker() {
-  var query = ("SELECT * FROM employee");
-  connection.query(query, function(err, res) {
-    console.table(res);     
+  inquirer
+    .prompt({
+      name: "action",
+      type: "rawlist",
+      message: "What would you like to do?",
+      choices: [
+        "View all employees",
+        "View all employees by department",
+        "View all employees by manager",
+        "Add Employee",
+        "Remove Employee",
+        "Update Employee"
+      ]
+    })
+    .then(function(answer) {
+      switch (answer.action) {
+      case "View all employees":
+        employeesAll();
+        break;
+
+      case "View all employees by department":
+        employeesByDept();
+        break;
+
+      case "View all employees by manager":
+        employeesByMgr();
+        break;
+
+      case "Add Employee":
+        addEmployee();
+        break;
+
+      case "Add Department":
+        addDepartmnet();
+        break;
+      
+      case "Add Role":
+        addRole();
+        break;
+      
+      case "Remove Employee":
+        removeEmployee();
+        break;
+      
+        case "Update Employee":
+        updateEmployee();
+        break;  
+      }
+    });
+}
+/**
+ *  Displays a formatted table of the main query defined above.
+ *
+ */
+function employeesAll() {
+  connection.query(mainQuery + " order by a.id", function(err, res) {
+    console.table(res);
+    runTracker();     
     });
 };
 
+/**
+ *  Function that first retrieves the list of departments, prompts the
+ *  user to select one to return all employees pertaining to that department.
+ */
+async function employeesByDept() {
+  const departments = await getDepts();
+    
+    console.log(departments);
+    inquirer
+      .prompt({
+        name: "department",
+        type: "list",
+        message: "What department would you like to search for?",
+        choices: departments
+      })
+      .then(function(answer) {
+        var query = mainQuery + " WHERE c.id = ?";
+        connection.query(query, [answer.department], function(err, res) {
+          if(res.length > 0){
+            console.table(res);
+        } else {
+          console.log("  Currently no employees in that deparment. ")
+        }
+        runTracker(); 
+        });
+      });
+};
 
-// function runSearch() {
-//   inquirer
-//     .prompt({
-//       name: "action",
-//       type: "rawlist",
-//       message: "What would you like to do?",
-//       choices: [
-//         "Find songs by artist",
-//         "Find all artists who appear more than once",
-//         "Find data within a specific range",
-//         "Search for a specific song",
-//         "Find artists with a top song and top album in the same year"
-//       ]
-//     })
-//     .then(function(answer) {
-//       switch (answer.action) {
-//       case "Find songs by artist":
-//         artistSearch();
-//         break;
+/**
+ *  Function that first retrieves the list of employees who are listed as managers
+ *  of other employees. Then prompts the user to select one to return all employees
+ *  pertaining to that department.
+ */
+function employeesByMgr() {
+  connection.query("SELECT concat(first_name, ' ', last_name) as name FROM employee where id in (SELECT manager_id from employee)", function(err, res) {
+    const managers=[];
+    res.forEach((mgr)=>{
+      managers.push(mgr.name);
+    });
 
-//       case "Find all artists who appear more than once":
-//         multiSearch();
-//         break;
+  inquirer
+    .prompt({
+      name: "manager",
+      type: "list",
+      message: "What manager would you like to search for?",
+      choices: managers
+    })
+    .then(function(answer) {
+      answer.manager = '%' + answer.manager + '%';
+      var query = mainQuery + " WHERE d.manager LIKE N?";
+      connection.query(query, [answer.manager], function(err, res) {
+        console.table(res);
+        runTracker(); 
+      });
+    });
+  });
+};
 
-//       case "Find data within a specific range":
-//         rangeSearch();
-//         break;
+/**
+ *  Function that first retrieves the list of employees and roles then
+ *  prompts the user to enter the information for the new employee.
+ *  Inserts a record based on user reponses.
+ */
+async function addEmployee() {
+  const roles = await getRoles();
+  // DEBUG
+  //console.log(roles);
+  const managers = await getEmployees();
+  // DEBUG
+  //console.log(managers);
+  managers.push({value: 0, name: "None"});
+  const questions = [{
+    name: "firstName",
+    type: "input",
+    message: "What is the employee's first name"
+    },
+    {
+      name: "lastName",
+      type: "input",
+      message: "What is the employee's last name"
+    },
+    {
+      name: "role",
+      type: "list",
+      message: "What is the employee's role",
+      choices: roles
+    },
+    {
+      name: "manager",
+      type: "list",
+      message: "What is the employee's manager",
+      choices: managers
+    },
+  ];
 
-//       case "Search for a specific song":
-//         songSearch();
-//         break;
+  inquirer.prompt(questions)
+  .then(function(answer) {
+    // Debug to validate answers.
+    // console.log(answer);
 
-//       case "Find artists with a top song and top album in the same year":
-//         songAndAlbumSearch();
-//         break;
-//       }
-//     });
-// }
+    // Sets manager id to null if no manager is selected.
+    if (answer.manager == 0) {answer.manager = null;};
+    var query = "INSERT INTO `employee` SET ?";
+    connection.query(query, { first_name: answer.firstName, last_name: answer.lastName, role_id: answer.role, manager_id: answer.manager}, function(err, res) {
+      if(err) {
+        console.log("Error adding employee to Database.", err);
+      } else {
+        console.log(`Employee created with ID of : ${res.insertId} successfully.`);
+      }
+      runTracker(); 
+    });
+  });
+};
 
-// function artistSearch() {
-//   inquirer
-//     .prompt({
-//       name: "artist",
-//       type: "input",
-//       message: "What artist would you like to search for?"
-//     })
-//     .then(function(answer) {
-//       var query = "SELECT position, song, year FROM top5000 WHERE ?";
-//       connection.query(query, { artist: answer.artist }, function(err, res) {
-//         for (var i = 0; i < res.length; i++) {
-//           console.log("Position: " + res[i].position + " || Song: " + res[i].song + " || Year: " + res[i].year);
-//         }
-//         runSearch();
-//       });
-//     });
-// }
+/**
+ *  Function that prompts the user to enter the information for 
+ *  the new deparment.
+ *  Inserts a record based on user reponses into department table.
+ */
+async function addDepartmnet() {
 
-// function multiSearch() {
-//   var query = "SELECT artist FROM top5000 GROUP BY artist HAVING count(*) > 1";
-//   connection.query(query, function(err, res) {
-//     for (var i = 0; i < res.length; i++) {
-//       console.log(res[i].artist);
-//     }
-//     runSearch();
-//   });
-// }
+  inquirer.prompt([{
+    name: "name",
+    type: "input",
+    message: "What is the name of the new Department: "
+    }])
+  .then(function(answer) {
+    // Debug to validate answers.
+    // console.log(answer);
 
-// function rangeSearch() {
-//   inquirer
-//     .prompt([
-//       {
-//         name: "start",
-//         type: "input",
-//         message: "Enter starting position: ",
-//         validate: function(value) {
-//           if (isNaN(value) === false) {
-//             return true;
-//           }
-//           return false;
-//         }
-//       },
-//       {
-//         name: "end",
-//         type: "input",
-//         message: "Enter ending position: ",
-//         validate: function(value) {
-//           if (isNaN(value) === false) {
-//             return true;
-//           }
-//           return false;
-//         }
-//       }
-//     ])
-//     .then(function(answer) {
-//       var query = "SELECT position,song,artist,year FROM top5000 WHERE position BETWEEN ? AND ?";
-//       connection.query(query, [answer.start, answer.end], function(err, res) {
-//         for (var i = 0; i < res.length; i++) {
-//           console.log(
-//             "Position: " +
-//               res[i].position +
-//               " || Song: " +
-//               res[i].song +
-//               " || Artist: " +
-//               res[i].artist +
-//               " || Year: " +
-//               res[i].year
-//           );
-//         }
-//         runSearch();
-//       });
-//     });
-// }
+    var query = "INSERT INTO `department` SET ?";
+    connection.query(query, { name: answer.name}, function(err, res) {
+      if(err) {
+        console.log("Error adding department to Database.", err);
+      } else {
+        console.log(`Department created with ID of : ${res.insertId} successfully.`);
+      }
+      runTracker(); 
+    });
+  });
+};
 
-// function songSearch() {
-//   inquirer
-//     .prompt({
-//       name: "song",
-//       type: "input",
-//       message: "What song would you like to look for?"
-//     })
-//     .then(function(answer) {
-//       console.log(answer.song);
-//       connection.query("SELECT * FROM top5000 WHERE ?", { song: answer.song }, function(err, res) {
-//         console.log(
-//           "Position: " +
-//             res[0].position +
-//             " || Song: " +
-//             res[0].song +
-//             " || Artist: " +
-//             res[0].artist +
-//             " || Year: " +
-//             res[0].year
-//         );
-//         runSearch();
-//       });
-//     });
-// }
+/**
+ *  Function that prompts the user to enter the information for the new role.
+ *  Inserts a record based on user reponses into role table.
+ */
+async function addRole() {
+  const departments = await getDepts();
 
-// function songAndAlbumSearch() {
-//   inquirer
-//     .prompt({
-//       name: "artist",
-//       type: "input",
-//       message: "What artist would you like to search for?"
-//     })
-//     .then(function(answer) {
-//       var query = "SELECT top_albums.year, top_albums.album, top_albums.position, top5000.song, top5000.artist ";
-//       query += "FROM top_albums INNER JOIN top5000 ON (top_albums.artist = top5000.artist AND top_albums.year ";
-//       query += "= top5000.year) WHERE (top_albums.artist = ? AND top5000.artist = ?) ORDER BY top_albums.year, top_albums.position";
+  inquirer.prompt([{
+    name: "title",
+    type: "input",
+    message: "What is the title of the new role: "
+    },
+  {
+    name: "salary",
+    type: "input",
+    message: "What is the salary of this new role: "
+  },
+  {
+    name: "department",
+    type: "list",
+    message: "What deparment will this role be assigned to: ",
+    choices: departments
+  },
+])
+  .then(function(answer) {
+    // Debug to validate answers.
+    // console.log(answer);
 
-//       connection.query(query, [answer.artist, answer.artist], function(err, res) {
-//         console.log(res.length + " matches found!");
-//         for (var i = 0; i < res.length; i++) {
-//           console.log(
-//             i+1 + ".) " +
-//               "Year: " +
-//               res[i].year +
-//               " Album Position: " +
-//               res[i].position +
-//               " || Artist: " +
-//               res[i].artist +
-//               " || Song: " +
-//               res[i].song +
-//               " || Album: " +
-//               res[i].album
-//           );
-//         }
+    var query = "INSERT INTO `role` SET ?";
+    connection.query(query, { name: answer.name}, function(err, res) {
+      if(err) {
+        console.log("Error adding department to Database.", err);
+      } else {
+        console.log(`Department created with ID of : ${res.insertId} successfully.`);
+      }
+      runTracker(); 
+    });
+  });
+};
 
-//         runSearch();
-//       });
-//     });
-// }
+/**
+ *  Function that first retrieves the list of employees then
+ *  prompts the user to selec the employee to remove.
+ *  Deletes a record based on user reponse.
+ */
+async function removeEmployee() {
+
+  const employees = await getEmployees();
+  inquirer.prompt([{
+    name: "target",
+    type: "list",
+    message: "Which employee would you like to remove: ",
+    choices: employees
+  }])
+  .then(function(answer) {
+    // Debug to validate answers.
+    // console.log(answer);
+    var query = "DELETE FROM `employee` WHERE ?";
+    connection.query(query, { id: answer.target}, function(err, res) {
+      if(err) {
+        console.log("Error removing employee from Database.", err);
+      } else {
+        console.log(`Employee deleted successfully.`);
+      }
+      runTracker(); 
+    });
+  });
+};
+
+ 
