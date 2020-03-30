@@ -116,7 +116,10 @@ function runTracker() {
         "View all employees",
         "View all employees by department",
         "View all employees by manager",
+        "View Budget by Department",
         "Add Employee",
+        "Add Department",
+        "Add Role",
         "Remove Employee",
         "Update Employee"
       ]
@@ -133,6 +136,10 @@ function runTracker() {
 
       case "View all employees by manager":
         employeesByMgr();
+        break;
+
+      case "View Budget by Department":
+        viewBudget();
         break;
 
       case "Add Employee":
@@ -160,6 +167,8 @@ function runTracker() {
 /**
  *  Displays a formatted table of the main query defined above.
  *
+ *  Returns console table of Employee id, first  & last name, title,
+ *  department, salary, and manager.
  */
 function employeesAll() {
   connection.query(mainQuery + " order by a.id", function(err, res) {
@@ -171,6 +180,8 @@ function employeesAll() {
 /**
  *  Function that first retrieves the list of departments, prompts the
  *  user to select one to return all employees pertaining to that department.
+ * 
+ *  Returns ID of new employee.
  */
 async function employeesByDept() {
   const departments = await getDepts();
@@ -286,6 +297,8 @@ async function addEmployee() {
  *  Function that prompts the user to enter the information for 
  *  the new deparment.
  *  Inserts a record based on user reponses into department table.
+ * 
+ *  Returns ID of new department.
  */
 async function addDepartmnet() {
 
@@ -339,11 +352,12 @@ async function addRole() {
     // console.log(answer);
 
     var query = "INSERT INTO `role` SET ?";
-    connection.query(query, { name: answer.name}, function(err, res) {
+    
+    connection.query(query, { title: answer.title, salary: answer.salary, department_id: answer.department}, function(err, res) {
       if(err) {
-        console.log("Error adding department to Database.", err);
+        console.log("Error adding role to Database.", err);
       } else {
-        console.log(`Department created with ID of : ${res.insertId} successfully.`);
+        console.log(`Role created with ID of : ${res.insertId} successfully.`);
       }
       runTracker(); 
     });
@@ -352,8 +366,10 @@ async function addRole() {
 
 /**
  *  Function that first retrieves the list of employees then
- *  prompts the user to selec the employee to remove.
+ *  prompts the user to select the employee to remove.
  *  Deletes a record based on user reponse.
+ * 
+ *  Retuns confirmation
  */
 async function removeEmployee() {
 
@@ -379,4 +395,74 @@ async function removeEmployee() {
   });
 };
 
- 
+/**
+ * Retreives all current list of employees and roles.
+ * Prompts user select employee to update and to provide
+ * a new role for selected employee.
+ * 
+ * Returns confirmation.
+ */
+async function updateEmployee() {
+
+  const employees = await getEmployees();
+  const roles = await getRoles();
+  inquirer.prompt([{
+    name: "target",
+    type: "list",
+    message: "Which employee would you like to update: ",
+    choices: employees
+  },
+  {
+    name: "role",
+    type: "list",
+    message: "Which is the employees new role: ",
+    choices: roles
+  }
+])
+  .then(function(answer) {
+    // Debug to validate answers.
+    // console.log(answer);
+    var query = "UPDATE `employee` SET ? WHERE ?";
+    connection.query(query, [{role_id: answer.role}, {id: answer.target}], function(err, res) {
+      if(err) {
+        console.log("Error updating employee in Database.", err);
+      } else {
+        console.log(`Employee updated successfully.`);
+      }
+      runTracker(); 
+    });
+  });
+};
+
+/**
+ * Retrieves current list of Departments, then prompts user to select one
+ * and returns aggregate of combine salaries for employees in selected
+ * department.
+ *
+ * Returns console table of Department Name, # of Employees, sum of salaries.
+ */
+async function viewBudget() {
+
+  const departments = await getDepts();
+  
+  inquirer.prompt([{
+    name: "target",
+    type: "list",
+    message: "Which department's budget would you like to view: ",
+    choices: departments
+  }
+])
+  .then(function(answer) {
+    // Debug to validate answers.
+    // console.log(answer);
+    var query = "SELECT b.name as Department, count(a.id) as Num_of_Employees, sum(c.salary) as Salary_Budget FROM `employee` as a INNER JOIN (SELECT id, salary, department_id FROM role) as c ON a.role_id = c.id INNER JOIN department as b ON c.department_id = b.id WHERE b.id = ?";
+    connection.query(query, [answer.target], function(err, res) {
+      if(err) {
+        console.log("Error quering Database.", err);
+      } else {
+        console.table(res);
+      }
+      runTracker(); 
+    });
+  });
+};
