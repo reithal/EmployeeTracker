@@ -49,7 +49,7 @@ The user will be prompted with a series of options to perform their task. Some o
 
 Once prompted, the system will perform the required queries against the database to retreive or alter the data as requested.
 
-![HowTo](http://reithal.github.io/EmployeeTracker/assets/images/employeetracker.gif)
+![HowTo](https://github.com/reithal/EmployeeTracker/blob/master/assets/images/employeetracker.gif)
 
 ## License
 
