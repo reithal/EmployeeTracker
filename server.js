@@ -20,10 +20,22 @@ var connection = mysql.createConnection({
   password: "root",
   database: "EMPLOYEE_TRACKER_DB"
 });
+var figlet = require('figlet');
+ 
+figlet('Employee Tracker', function(err, data) {
+    if (err) {
+        console.log('Something went wrong...');
+        console.dir(err);
+        return;
+    }
+    console.log(data)
+});
+
 
 // Connect to the database and initiate the first funtion to bring up inquirer.
 connection.connect(function(err) {
   if (err) throw err;
+
   runTracker();
 });
 
@@ -116,6 +128,8 @@ function runTracker() {
         "View all employees",
         "View all employees by department",
         "View all employees by manager",
+        "View departments",
+        "View roles",
         "View Budget by Department",
         "Add Employee",
         "Add Department",
@@ -140,6 +154,14 @@ function runTracker() {
 
       case "View Budget by Department":
         viewBudget();
+        break;
+
+      case "View departments":
+        viewDepartments();
+        break;
+
+      case "View roles":
+        viewRoles();
         break;
 
       case "Add Employee":
@@ -322,6 +344,38 @@ async function addDepartmnet() {
     });
   });
 };
+
+
+function viewRoles(){
+
+  var query = "SELECT * FROM `role`";
+  connection.query(query, function(err, res) {
+    if(err) {
+      console.log("Error retrieving roles from Database.", err);
+    } else {
+     console.table(res);
+    }
+    runTracker();
+  });
+};
+
+/**
+ * Simply console logs the name of departments
+ *
+ */
+function viewDepartments(){
+
+  var query = "SELECT * FROM `department`";
+  connection.query(query, function(err, res) {
+    if(err) {
+      console.log("Error retrieving department from Database.", err);
+    } else {
+     console.table(res);
+    }
+    runTracker();
+  });
+};
+
 
 /**
  *  Function that prompts the user to enter the information for the new role.
